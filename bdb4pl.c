@@ -370,7 +370,7 @@ unify_dbt(term_t t, dtype type, DBT *dbt)
 }
 
 
-static int
+static bool
 get_dbt(term_t t, dtype type, DBT *dbt)
 { memset(dbt, 0, sizeof(*dbt));
 
@@ -379,8 +379,9 @@ get_dbt(term_t t, dtype type, DBT *dbt)
     { size_t len;
 
       dbt->data = PL_record_external(t, &len);
-      dbt->size = len;
-      return TRUE;
+      assert(len <= UINT32_MAX);
+      dbt->size = (u_int32_t) len; /* dubious cast, added assertion */
+      return true;
     }
     case D_ATOM:
     { size_t len;
@@ -388,12 +389,13 @@ get_dbt(term_t t, dtype type, DBT *dbt)
 
       if ( PL_get_nchars(t, &len, &s,
 			 CVT_ATOM|CVT_EXCEPTION|REP_UTF8|BUF_MALLOC) )
-      { dbt->data = s;
-	dbt->size = len;
+      { assert(len <= UINT32_MAX);
+	dbt->data = s;
+	dbt->size = (u_int32_t) len;
 
-	return TRUE;
+	return true;
       } else
-	return FALSE;
+	return false;
     }
     case D_CBLOB:
     { size_t len;
@@ -402,12 +404,13 @@ get_dbt(term_t t, dtype type, DBT *dbt)
       if ( PL_get_nchars(t, &len, &s,
 			 CVT_ATOM|CVT_STRING|CVT_EXCEPTION|
 			 REP_ISO_LATIN_1|BUF_MALLOC) )
-      { dbt->data = s;
-	dbt->size = len;
+      { assert(len <= UINT32_MAX);
+	dbt->data = s;
+	dbt->size = (u_int32_t) len;
 
-	return TRUE;
+	return true;
       } else
-	return FALSE;
+	return false;
     }
     case D_CSTRING:
     { size_t len;
@@ -415,12 +418,13 @@ get_dbt(term_t t, dtype type, DBT *dbt)
 
       if ( PL_get_nchars(t, &len, &s,
 			 CVT_ATOM|CVT_STRING|CVT_EXCEPTION|REP_UTF8|BUF_MALLOC) )
-      { dbt->data = s;
-	dbt->size = len+1;		/* account for terminator */
+      { assert(len < UINT32_MAX);
+	dbt->data = s;
+	dbt->size = (u_int32_t) (len+1); /* account for terminator */
 
-	return TRUE;
+	return true;
       } else
-	return FALSE;
+	return false;
     }
     case D_CLONG:
     { long v;
@@ -430,15 +434,15 @@ get_dbt(term_t t, dtype type, DBT *dbt)
 
 	*d = v;
 	dbt->data = d;
-	dbt->size = sizeof(long);
+	dbt->size = (u_int32_t) sizeof(long);
 
-	return TRUE;
+	return true;
       } else
-	return FALSE;
+	return false;
     }
   }
   assert(0);
-  return FALSE;
+  return false;
 }
 
 
@@ -1360,7 +1364,7 @@ out:
 
 static foreign_t
 pl_bdb_get(term_t handle, term_t key, term_t value, control_t ctx)
-{ int rval;
+{ foreign_t rval;
 
   NOSIG(rval = pl_bdb_getdel(handle, key, value, ctx, FALSE));
 
@@ -1370,9 +1374,9 @@ pl_bdb_get(term_t handle, term_t key, term_t value, control_t ctx)
 
 static foreign_t
 pl_bdb_del3(term_t handle, term_t key, term_t value, control_t ctx)
-{ int rval;
+{ foreign_t rval;
 
-  NOSIG(rval=pl_bdb_getdel(handle, key, value, ctx, TRUE));
+  NOSIG(rval = pl_bdb_getdel(handle, key, value, ctx, TRUE));
 
   return rval;
 }
@@ -1626,14 +1630,14 @@ bdb_init(term_t newenv, term_t option_list)
 
 	if ( !PL_get_size_ex(a, &v) )
 	  return FALSE;
-	env->env->set_cachesize(env->env, 0, v, 0);
+	env->env->set_cachesize(env->env, 0, (u_int32_t) v, 0); /* safe cast */
 	flags |= DB_INIT_MPOOL;
       } else if ( name == ATOM_thread_count )
       { size_t v;
 
 	if ( !PL_get_size_ex(a, &v) )
 	  return FALSE;
-	env->env->set_thread_count(env->env, v);
+	env->env->set_thread_count(env->env, (u_int32_t) v); /* safe cast */
       } else if ( name == ATOM_home )	/* db_home */
       {	if ( !PL_get_file_name(a, &home,
 			       PL_FILE_OSPATH|PL_FILE_EXIST|PL_FILE_ABSOLUTE) )
